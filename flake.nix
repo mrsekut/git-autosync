@@ -10,7 +10,7 @@
     let
       # System-independent outputs
       systemIndependent = {
-        lib.mkAutosync = { pkgs }: import ./lib/mk-autosync.nix { inherit pkgs; };
+        lib.mkAutosync = { pkgs }: import ./mk-autosync.nix { inherit pkgs; };
       };
 
       # System-dependent outputs
