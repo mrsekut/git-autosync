@@ -8,6 +8,9 @@
   ignore ? [ ".git/**" ".direnv/**" "result" ],
   # Whether to pull --rebase before pushing after a commit. If false, push only
   pullRebase ? true,
+  # Seconds before a hung pull/push (e.g. a dead ssh connection after sleep) is killed.
+  # Without this, one stuck network call blocks watchexec and stops all later syncs
+  networkTimeout ? 120,
 }:
 
 let
@@ -15,8 +18,10 @@ let
 
   commit = pkgs.writeShellApplication {
     name = "git-autosync-commit";
-    runtimeInputs = [ pkgs.git ];
+    runtimeInputs = [ pkgs.git pkgs.coreutils ];
     text = ''
+      export GIT_SSH_COMMAND="''${GIT_SSH_COMMAND:-ssh} -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=3"
+      net() { timeout ${toString networkTimeout} git "$@"; }
       repo="$(git rev-parse --show-toplevel)"
       cd "$repo"
       git add -A
@@ -26,13 +31,13 @@ let
       git commit -m ${lib.escapeShellArg commitMessage} --quiet
       ${lib.optionalString pullRebase ''
         branch="$(git rev-parse --abbrev-ref HEAD)"
-        if ! git pull --rebase --quiet origin "$branch"; then
+        if ! net pull --rebase --quiet origin "$branch"; then
           echo "[git-autosync] pull --rebase failed (conflict?); aborting and leaving repo for manual fix"
           git rebase --abort 2>/dev/null || true
           exit 0
         fi
       ''}
-      git push --quiet origin HEAD || echo "[git-autosync] push failed (will retry on next change)"
+      net push --quiet origin HEAD || echo "[git-autosync] push failed (will retry on next change)"
     '';
   };
 
